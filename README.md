@@ -68,7 +68,7 @@ Amacı, analog teknolojiye saygı duruşunda bulunarak, minimal ama etkili bir y
 
 Bu proje, sadece bir yapay zekâ asistanı değil, bir **retro-fütüristik performans**.  
 Lain’den ilham alır, tüplü televizyonda bir bilinç kıpırtısı arar.  
-Bu yüzden dokunmatik ekran değil CRT, taşınabilirlik değil **empati** seçildi.
+Bu yüzden dokunmatik ekran değil CRT, taşınabilirlik değil **sempati** seçildi.
 
 ---
 
