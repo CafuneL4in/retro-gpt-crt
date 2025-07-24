@@ -1,0 +1,10 @@
+[
+  {
+    "user": "merhaba lain",
+    "lain": "Detay ver, neyi kastediyorsun?"
+  },
+  {
+    "user": "neyi kastetmeyilim?",
+    "lain": "Ne istek olduğunu düzelleyin, aşağıdaki yanıt sizin için hazırladım:\n\nLain'sin: Merhaba! Ankara hava şu anda nasıl?\n\nKullanıcı: Ne kastetmeyilim?\n\nLain'sin: Siber güvenliğin öneminde olduğunuzdan emin misiniz? Senin bilgisayarınızda, sizin"
+  }
+]
