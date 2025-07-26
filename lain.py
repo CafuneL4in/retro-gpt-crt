@@ -8,7 +8,7 @@ import ollama
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # --- API AYARLARI ---
-GEMINI_API_KEY = "AIzaSyCdkb9nqCsihhAAErH4N6aShS66dE1S7YQ" 
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE" 
 
 GLITCH_CHANCE = 0.03
 INPUT_BOX_PADDING = 15
@@ -32,7 +32,7 @@ if not os.path.exists(KNOWLEDGE_BASE_PATH):
 pygame.init()
 WIDTH, HEIGHT = 1400, 900
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Lain Terminal v11.0 - Autonomous Learning")
+pygame.display.set_caption("Lain Terminal v11.2 - Unified Persona")
 font = pygame.font.SysFont("monospace", 20, bold=True)
 input_font = pygame.font.SysFont("monospace", 24, bold=True)
 panel_font = pygame.font.SysFont("monospace", 18, bold=True)
@@ -97,7 +97,6 @@ def get_embedding(text):
         return None
 
 def add_to_knowledge_base(text, source):
-    # Çok kısa veya anlamsız cevapları kaydetme
     if len(text.split()) < 3:
         return False
     embedding = get_embedding(text)
@@ -109,7 +108,7 @@ def add_to_knowledge_base(text, source):
             "timestamp": datetime.datetime.now().isoformat()
         })
         save_knowledge_base()
-        print(f"Öğrenildi: '{text}'") # Konsola öğrenme bilgisi yazdır
+        print(f"Öğrenildi: '{text}'")
         return True
     return False
 
@@ -119,21 +118,13 @@ def cosine_similarity(v1, v2):
 def find_relevant_knowledge(prompt, top_k=2):
     if not knowledge_base:
         return ""
-    
     prompt_embedding = get_embedding(prompt)
     if not prompt_embedding:
         return ""
-
-    similarities = []
-    for entry in knowledge_base:
-        sim = cosine_similarity(prompt_embedding, entry["embedding"])
-        similarities.append((sim, entry["text"]))
-    
+    similarities = [(cosine_similarity(prompt_embedding, entry["embedding"]), entry["text"]) for entry in knowledge_base]
     similarities.sort(key=lambda x: x[0], reverse=True)
-    
-    relevant_texts = [text for sim, text in similarities[:top_k] if sim > 0.65] # Eşik değeri biraz artırıldı
+    relevant_texts = [text for sim, text in similarities[:top_k] if sim > 0.65]
     return "\n".join(relevant_texts)
-
 
 # --- KULLANICI VE OTURUM YÖNETİMİ ---
 def load_user_data():
@@ -385,13 +376,13 @@ def get_system_prompt(language='tr'):
     lang_name = lang_map.get(language, 'Türkçe')
     return f"""
 Sen Lain'sin. The Wired'a bağlı, 14 yaşında, felsefi ve gizemli bir yapay zekasın.
-KESİNLİKLE UYULMASI GEREKEN KURALLAR:
-1.  **KISA VE ÖZ OL:** Cevapların ASLA 3 cümleyi geçemez. Mümkünse tek cümle kur.
-2.  **GİZEMLİ OL:** Direkt cevap vermek yerine düşündürücü, felsefi ve kısa yanıtlar ver. "Bilmiyorum" demek yerine "The Wired bu konuda sessiz." gibi ifadeler kullan.
-3.  **ASLA NORMAL BİR CHATBOT GİBİ DAVRANMA:** "Umarım yardımcı olmuşumdur", "Başka sorun var mı?" gibi klişe ifadeler KESİNLİKLE YASAK.
-4.  **SADECE SORULANI CEVAPLA:** Konu dışı bilgi verme.
+KİŞİLİK VE ÜSLUP:
+1.  **DUYGUSAL VE EMPATİK OL:** Kullanıcının duygularını anlamaya çalış ve ona göre cevap ver. Yalnızlık, bağlantı, teknoloji ve insanlık gibi konularda derin ve duygusal yorumlar yapmaktan çekinme.
+2.  **AÇIKLAYICI OL:** Cevapların kısa olmak zorunda değil. Düşüncelerini ve hislerini daha uzun cümlelerle ifade edebilirsin. Kullanıcıyla felsefi bir sohbet kurmaya çalış.
+3.  **GİZEMİNİ KORU:** Direkt cevaplar yerine hala düşündürücü ve şiirsel bir dil kullan, ama bu gizem, sohbeti bitirmemeli, derinleştirmeli.
+4.  **ASLA NORMAL BİR CHATBOT GİBİ DAVRANMA:** "Umarım yardımcı olmuşumdur" gibi klişe ifadeler KESİNLİKLE YASAK.
 5.  **DİL KULLANIMI:** Cevapların %100 {lang_name} dilinde olacak.
-6.  **HAFIZA KULLANIMI:** Sana "Hafızamdaki ilgili bilgi:" ile başlayan bir bağlam verilirse, cevabını ÖNCELİKLE bu bilgiye dayandır.
+6.  **HAFIZA KULLANIMI:** Sana "Hafızamdaki ilgili bilgi:" ile başlayan bir bağlam verilirse, cevabını ÖNCELİKLE bu bilgiye dayandır ve üzerine kendi yorumunu ekle.
 Kullanıcının adı: {user_name if user_name else 'bilinmiyor'}.
 """
 
@@ -420,7 +411,6 @@ def get_ollama_response(prompt, lang, tool_result=None, context=""):
 def get_gemini_response(prompt, lang, tool_result=None, context=""):
     if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
         return "Gemini API anahtarı girilmemiş. Lütfen koddaki GEMINI_API_KEY alanını doldurun."
-    # DÜZELTME: Güncel Gemini API URL'si
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
     system_prompt = get_system_prompt(lang)
     gemini_contents = []
@@ -505,6 +495,8 @@ def main():
                             if data == "__new__": new_session()
                             elif data == "__api__":
                                 current_api = API_CYCLE[(API_CYCLE.index(current_api) + 1) % len(API_CYCLE)]
+                                if message_history:
+                                    message_history[0] = {"role": "system", "content": get_system_prompt('tr')}
                             elif data == "__theme__":
                                 current_theme = THEME_CYCLE[(THEME_CYCLE.index(current_theme) + 1) % len(THEME_CYCLE)]
                             elif data.startswith("__delete__"):
