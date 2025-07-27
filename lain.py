@@ -32,7 +32,7 @@ if not os.path.exists(KNOWLEDGE_BASE_PATH):
 pygame.init()
 WIDTH, HEIGHT = 1400, 900
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Lain Terminal v11.2 - Unified Persona")
+pygame.display.set_caption("Lain Terminal v11.3 - Dynamic Panel")
 font = pygame.font.SysFont("monospace", 20, bold=True)
 input_font = pygame.font.SysFont("monospace", 24, bold=True)
 panel_font = pygame.font.SysFont("monospace", 18, bold=True)
@@ -51,10 +51,12 @@ THEMES = {
         "glitch_1": (255, 0, 150), "glitch_2": (0, 255, 255), "scanline_color": (0, 50, 30, 50)
     },
     "dark": {
-        "bg": (15, 15, 15), "user_bubble": (60, 60, 80), "lain_bubble": (40, 40, 40), "text": (220, 220, 220)
+        "bg": (15, 15, 15), "panel": (25, 25, 25), "user_bubble": (60, 60, 80), 
+        "lain_bubble": (40, 40, 40), "text": (220, 220, 220), "panel_text": (200, 200, 200)
     },
     "light": {
-        "bg": (240, 240, 240), "user_bubble": (180, 180, 200), "lain_bubble": (160, 160, 180), "text": (20, 20, 20)
+        "bg": (240, 240, 240), "panel": (220, 220, 220), "user_bubble": (180, 180, 200), 
+        "lain_bubble": (160, 160, 180), "text": (20, 20, 20), "panel_text": (50, 50, 50)
     }
 }
 THEME_CYCLE = ["dark", "light", "cybercore"]
@@ -227,14 +229,20 @@ def draw_text_bubble(text, x, y, align="left"):
 
 def draw_session_panel():
     global session_buttons
-    panel_theme = THEMES["cybercore"]
+    panel_theme = THEMES[current_theme] # DÜZELTME: Panelin temasını dinamik yap
     pygame.draw.rect(screen, panel_theme["panel"], (0, 0, 300, HEIGHT))
     y, session_buttons = 20, []
+    
+    # DÜZELTME: Güvenli renk seçimi
+    border_color1 = panel_theme.get("glitch_1", panel_theme["panel_text"])
+    border_color2 = panel_theme.get("glitch_2", panel_theme["panel_text"])
+    
     new_btn_rect = pygame.Rect(15, y, 270, 45)
-    pygame.draw.rect(screen, panel_theme["glitch_1"], new_btn_rect, border_radius=8, width=2)
-    draw_glitch_text(screen, "+ Yeni Oturum", (25, y + 12), font, panel_theme["text"], "cybercore")
+    pygame.draw.rect(screen, (80, 80, 140), new_btn_rect, border_radius=8) # Sabit renk
+    draw_glitch_text(screen, "+ Yeni Oturum", (25, y + 12), font, (255,255,255), current_theme)
     session_buttons.append((new_btn_rect, "__new__"))
     y += 60
+    
     chat_files = sorted([f for f in os.listdir(CHATLOG_DIR) if f.endswith('.json')], key=lambda f: os.path.getmtime(os.path.join(CHATLOG_DIR, f)), reverse=True)
     for fname in chat_files[:12]:
         try:
@@ -245,27 +253,29 @@ def draw_session_panel():
         btn_color = (60, 60, 60) if is_active else (40, 40, 40)
         btn_rect, del_btn_rect = pygame.Rect(15, y, 230, 40), pygame.Rect(250, y, 35, 40)
         pygame.draw.rect(screen, btn_color, btn_rect, border_radius=5)
-        pygame.draw.rect(screen, panel_theme["glitch_1"], del_btn_rect, border_radius=5)
+        pygame.draw.rect(screen, (140, 50, 50), del_btn_rect, border_radius=5)
         wrapped_title = wrap_text_advanced(title, panel_font, 210)[0]
         if len(title) > len(wrapped_title): wrapped_title += "..."
-        draw_glitch_text(screen, wrapped_title, (25, y + 10), panel_font, panel_theme["text"], "cybercore")
-        draw_glitch_text(screen, "X", (258, y + 8), font, panel_theme["text"], "cybercore")
+        draw_glitch_text(screen, wrapped_title, (25, y + 10), panel_font, panel_theme["panel_text"], current_theme)
+        draw_glitch_text(screen, "X", (258, y + 8), font, (220,220,220), current_theme)
         session_buttons.append((btn_rect, fname)); session_buttons.append((del_btn_rect, "__delete__" + fname))
         y += 50
+        
     api_btn_rect = pygame.Rect(15, HEIGHT - 115, 270, 45)
-    pygame.draw.rect(screen, panel_theme["glitch_1"], api_btn_rect, border_radius=8, width=2)
-    draw_glitch_text(screen, f"API: {current_api.capitalize()}", (25, HEIGHT - 105), font, panel_theme["text"], "cybercore")
+    pygame.draw.rect(screen, (80,140,80), api_btn_rect, border_radius=8)
+    draw_glitch_text(screen, f"API: {current_api.capitalize()}", (25, HEIGHT - 105), font, (255,255,255), current_theme)
     session_buttons.append((api_btn_rect, "__api__"))
+    
     theme_btn_rect = pygame.Rect(15, HEIGHT - 60, 270, 45)
-    pygame.draw.rect(screen, panel_theme["glitch_2"], theme_btn_rect, border_radius=8, width=2)
-    draw_glitch_text(screen, f"Tema: {current_theme.capitalize()}", (25, HEIGHT - 50), font, panel_theme["text"], "cybercore")
+    pygame.draw.rect(screen, (80,140,80), theme_btn_rect, border_radius=8)
+    draw_glitch_text(screen, f"Tema: {current_theme.capitalize()}", (25, HEIGHT - 50), font, (255,255,255), current_theme)
     session_buttons.append((theme_btn_rect, "__theme__"))
 
 def draw_input_box(text, active, box_height):
     theme = THEMES[current_theme]
     input_rect = pygame.Rect(350, HEIGHT - box_height - 20, WIDTH - 400, box_height)
     pygame.draw.rect(screen, theme["user_bubble"], input_rect, border_radius=10)
-    border_color = THEMES["cybercore"]["glitch_2"] if active and current_theme == "cybercore" else (150,150,150)
+    border_color = THEMES["cybercore"].get("glitch_2", (150,150,150)) if active and current_theme == "cybercore" else (150,150,150)
     pygame.draw.rect(screen, border_color, input_rect, 2, border_radius=10)
     line_y_offset = input_rect.y + INPUT_BOX_PADDING
     lines = wrap_text_advanced(text, input_font, input_rect.width - INPUT_BOX_PADDING * 2)
