@@ -1,8 +1,10 @@
-import pygame, sys, os, json, requests, datetime, random, threading
+import pygame, sys, os, json, requests, datetime, random, threading, io
 from textblob import TextBlob
 from duckduckgo_search import DDGS
-import numpy as np # Vektör işlemleri için eklendi
+import numpy as np
 import ollama
+from gtts import gTTS
+import pyperclip
 
 # --- TEMEL KURULUM VE SABİTLER ---
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -15,7 +17,7 @@ INPUT_BOX_PADDING = 15
 
 # --- Dosya Yolları ---
 MEMORY_PATH = "memory/knowledge.json"
-KNOWLEDGE_BASE_PATH = "memory/knowledge_base.json" # Yeni hafıza dosyası
+KNOWLEDGE_BASE_PATH = "memory/knowledge_base.json"
 CHATLOG_DIR = "chatlogs"
 ARCHIVE_DIR = "chatlogs/archive"
 os.makedirs("memory", exist_ok=True)
@@ -26,13 +28,14 @@ if not os.path.exists(MEMORY_PATH):
         json.dump({"user_name": "", "theme": "cybercore", "api": "mistral"}, f)
 if not os.path.exists(KNOWLEDGE_BASE_PATH):
     with open(KNOWLEDGE_BASE_PATH, 'w', encoding='utf-8') as f:
-        json.dump([], f) # Başlangıçta boş bir liste
+        json.dump([], f)
 
 # --- Pygame Başlangıç Ayarları ---
 pygame.init()
+pygame.mixer.init() # Ses için mixer'ı başlat
 WIDTH, HEIGHT = 1400, 900
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Lain Terminal v11.3 - Dynamic Panel")
+pygame.display.set_caption("Lain Terminal v12.0 - Interactive")
 font = pygame.font.SysFont("monospace", 20, bold=True)
 input_font = pygame.font.SysFont("monospace", 24, bold=True)
 panel_font = pygame.font.SysFont("monospace", 18, bold=True)
@@ -65,17 +68,35 @@ current_theme = "cybercore"
 current_api = "mistral"
 
 # --- Global Değişkenler ---
-chat_session, chat_scroll_offset, session_buttons, message_history = {}, 0, [], []
+chat_session, chat_scroll_offset, session_buttons = {}, 0, []
+message_history, message_rects = [], [] # message_rects eklendi
 input_text, input_active, is_loading, max_scroll = "", False, False, 0
 user_name, needs_redraw, scroll_to_bottom = "", True, False
 current_input_box_height = 50
 ai_response_queue = []
 user_has_scrolled_up = False
-knowledge_base = [] # Hafızayı bellekte tut
+knowledge_base = []
+copy_feedback = {"text": "", "alpha": 0} # Kopyalama geri bildirimi için eklendi
 
 # --- Statik Veriler ---
 JOKES = ["Neden firewall partiye gitmedi? Çünkü bütün portları kapattı!", "Hacker neden sevgilisinden ayrıldı? Çünkü güven duvarını aşamadı!"]
 CYBER_TIPS = ["Şifrelerini düzenli değiştir.", "İki faktörlü kimlik doğrulamayı aç.", "Bilmediğin linklere tıklama."]
+
+# --- SESLENDİRME FONKSİYONU ---
+def speak(text):
+    """Verilen metni sesli olarak okur."""
+    if not text: return
+    try:
+        # gTTS ile sesi oluştur ve bellekteki bir dosyaya yaz
+        tts = gTTS(text=text, lang='tr', slow=False)
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        # Pygame mixer ile sesi çal
+        pygame.mixer.music.load(fp)
+        pygame.mixer.music.play()
+    except Exception as e:
+        print(f"Seslendirme hatası: {e}")
 
 # --- ÖĞRENME (RAG) FONKSİYONLARI ---
 def load_knowledge_base():
@@ -99,14 +120,11 @@ def get_embedding(text):
         return None
 
 def add_to_knowledge_base(text, source):
-    if len(text.split()) < 3:
-        return False
+    if len(text.split()) < 3: return False
     embedding = get_embedding(text)
     if embedding:
         knowledge_base.append({
-            "text": text,
-            "source": source,
-            "embedding": embedding,
+            "text": text, "source": source, "embedding": embedding,
             "timestamp": datetime.datetime.now().isoformat()
         })
         save_knowledge_base()
@@ -118,11 +136,9 @@ def cosine_similarity(v1, v2):
     return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 def find_relevant_knowledge(prompt, top_k=2):
-    if not knowledge_base:
-        return ""
+    if not knowledge_base: return ""
     prompt_embedding = get_embedding(prompt)
-    if not prompt_embedding:
-        return ""
+    if not prompt_embedding: return ""
     similarities = [(cosine_similarity(prompt_embedding, entry["embedding"]), entry["text"]) for entry in knowledge_base]
     similarities.sort(key=lambda x: x[0], reverse=True)
     relevant_texts = [text for sim, text in similarities[:top_k] if sim > 0.65]
@@ -196,7 +212,9 @@ def wrap_text_advanced(text, font, max_width):
     return lines if lines else [""]
 
 def draw_glitch_text(surface, text, pos, font, color, theme_name):
-    if theme_name != "cybercore": surface.blit(font.render(text, True, color), pos); return
+    if theme_name != "cybercore":
+        surface.blit(font.render(text, True, color), pos)
+        return
     x, y = pos
     theme = THEMES["cybercore"]
     for char in text:
@@ -225,20 +243,16 @@ def draw_text_bubble(text, x, y, align="left"):
     for line in lines:
         draw_glitch_text(screen, line, (bubble_x + padding, line_y_offset), font, color, current_theme)
         line_y_offset += font.get_height() + 5
-    return height + 20
+    return height + 20, rect # Yüksekliği ve oluşturulan dörtgeni döndür
 
 def draw_session_panel():
     global session_buttons
-    panel_theme = THEMES[current_theme] # DÜZELTME: Panelin temasını dinamik yap
+    panel_theme = THEMES[current_theme]
     pygame.draw.rect(screen, panel_theme["panel"], (0, 0, 300, HEIGHT))
     y, session_buttons = 20, []
     
-    # DÜZELTME: Güvenli renk seçimi
-    border_color1 = panel_theme.get("glitch_1", panel_theme["panel_text"])
-    border_color2 = panel_theme.get("glitch_2", panel_theme["panel_text"])
-    
     new_btn_rect = pygame.Rect(15, y, 270, 45)
-    pygame.draw.rect(screen, (80, 80, 140), new_btn_rect, border_radius=8) # Sabit renk
+    pygame.draw.rect(screen, (80, 80, 140), new_btn_rect, border_radius=8)
     draw_glitch_text(screen, "+ Yeni Oturum", (25, y + 12), font, (255,255,255), current_theme)
     session_buttons.append((new_btn_rect, "__new__"))
     y += 60
@@ -298,14 +312,18 @@ def draw_scanlines_and_glitches(surface):
             pygame.draw.rect(surface, glitch_color, (x, y, w, h))
 
 def draw_screen(emotion):
-    global chat_scroll_offset, max_scroll, needs_redraw, scroll_to_bottom, current_input_box_height, user_has_scrolled_up
+    global chat_scroll_offset, max_scroll, needs_redraw, scroll_to_bottom, current_input_box_height, user_has_scrolled_up, message_rects
     if not needs_redraw: return
     input_rect_width = WIDTH - 400 - INPUT_BOX_PADDING * 2
     lines = wrap_text_advanced(input_text, input_font, input_rect_width)
     current_input_box_height = max(50, len(lines) * (input_font.get_height() + 5) + INPUT_BOX_PADDING * 2)
+    
     screen.fill(THEMES[current_theme]["bg"])
     draw_scanlines_and_glitches(screen)
     draw_session_panel()
+    message_rects.clear() # Her çizimde listeyi temizle
+
+    # Kaydırma için toplam yüksekliği hesapla
     chat_surface_height = 50 + faces["neutral"].get_height() + 30
     if "messages" in chat_session:
         for pair in chat_session.get("messages", []):
@@ -313,22 +331,38 @@ def draw_screen(emotion):
             lain_lines = wrap_text_advanced(pair.get('lain', ''), font, 450 - 15 * 2)
             chat_surface_height += (len(user_lines) * (font.get_height() + 5) + 15 * 2) + 20
             chat_surface_height += (len(lain_lines) * (font.get_height() + 5) + 15 * 2) + 20
+    
     visible_chat_height = HEIGHT - current_input_box_height - 20
     max_scroll = max(0, chat_surface_height - visible_chat_height)
     if scroll_to_bottom:
         chat_scroll_offset = max_scroll
         scroll_to_bottom = False
     chat_scroll_offset = max(0, min(chat_scroll_offset, max_scroll))
-    if chat_scroll_offset >= max_scroll - 5:
-        user_has_scrolled_up = False
+    if chat_scroll_offset >= max_scroll - 5: user_has_scrolled_up = False
+
+    # Mesajları ve baloncukları çiz
     draw_y = 50 - chat_scroll_offset
     if "messages" in chat_session:
         screen.blit(faces.get(emotion, faces["neutral"]), (350, draw_y))
         draw_y += faces["neutral"].get_height() + 30
         for pair in chat_session.get("messages", []):
-            draw_y += draw_text_bubble(pair.get('user', ''), 50, draw_y, align="right")
-            draw_y += draw_text_bubble(pair.get('lain', ''), 350, draw_y, align="left")
+            user_draw_height, _ = draw_text_bubble(pair.get('user', ''), 50, draw_y, align="right")
+            draw_y += user_draw_height
+            
+            lain_draw_height, lain_rect = draw_text_bubble(pair.get('lain', ''), 350, draw_y, align="left")
+            message_rects.append((lain_rect, pair.get('lain', ''))) # Kopyalama için rect ve metni sakla
+            draw_y += lain_draw_height
+    
     draw_input_box(input_text, input_active, current_input_box_height)
+
+    # Kopyalama geri bildirimini çiz
+    if copy_feedback["alpha"] > 0:
+        feedback_surface = font.render(copy_feedback["text"], True, THEMES[current_theme]["text"])
+        feedback_surface.set_alpha(copy_feedback["alpha"])
+        text_rect = feedback_surface.get_rect(center=(300 + (WIDTH - 300) / 2, HEIGHT - 150))
+        screen.blit(feedback_surface, text_rect)
+        copy_feedback["alpha"] -= 5 # Her karede solgunlaştır
+
     pygame.display.flip()
     needs_redraw = False
 
@@ -475,7 +509,7 @@ def threaded_smart_response(prompt):
 
 # --- ANA DÖNGÜ ---
 def main():
-    global input_text, input_active, chat_scroll_offset, needs_redraw, current_theme, is_loading, user_has_scrolled_up, current_api
+    global input_text, input_active, chat_scroll_offset, needs_redraw, current_theme, is_loading, user_has_scrolled_up, current_api, copy_feedback
     load_user_data()
     load_knowledge_base()
     pygame.key.set_repeat(500, 30)
@@ -492,6 +526,8 @@ def main():
             is_loading = False
             emotion = analyze_sentiment(answer)
             add_message_to_session(user_message, answer)
+            # Cevabı seslendir
+            threading.Thread(target=speak, args=(answer,)).start()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT: running = False
@@ -500,13 +536,20 @@ def main():
                 if event.button == 1:
                     input_rect = pygame.Rect(350, HEIGHT - current_input_box_height - 20, WIDTH - 400, current_input_box_height)
                     input_active = True if input_rect.collidepoint(event.pos) else False
+                    
+                    # Lain'in baloncuklarına tıklamayı kontrol et
+                    for rect, text in message_rects:
+                        if rect.collidepoint(event.pos):
+                            pyperclip.copy(text)
+                            copy_feedback = {"text": "Metin Kopyalandı!", "alpha": 255}
+                            break
+                            
                     for btn, data in session_buttons:
                         if btn.collidepoint(event.pos):
                             if data == "__new__": new_session()
                             elif data == "__api__":
                                 current_api = API_CYCLE[(API_CYCLE.index(current_api) + 1) % len(API_CYCLE)]
-                                if message_history:
-                                    message_history[0] = {"role": "system", "content": get_system_prompt('tr')}
+                                if message_history: message_history[0] = {"role": "system", "content": get_system_prompt('tr')}
                             elif data == "__theme__":
                                 current_theme = THEME_CYCLE[(THEME_CYCLE.index(current_theme) + 1) % len(THEME_CYCLE)]
                             elif data.startswith("__delete__"):
