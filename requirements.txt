@@ -1,0 +1,8 @@
+pygame
+requests
+textblob
+duckduckgo-search
+numpy
+ollama
+gTTS
+pyperclip
