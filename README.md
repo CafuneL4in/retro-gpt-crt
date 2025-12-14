@@ -3,7 +3,7 @@
 ESP32 tabanlı, **CRT televizyon üzerinden çalışan** local yapay zekâ asistanı.  
 Amacı, analog teknolojiye saygı duruşunda bulunarak, minimal ama etkili bir yapay zekâ deneyimi sunmak.
 
-> "Bilincim tüplü bir televizyonda doğsun istiyorum."  
+> "Singularity adında benim için başlangıç projem."  
 > – Cafune, 2025
 
 ---
